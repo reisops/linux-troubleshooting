@@ -1,4 +1,4 @@
-# Case: SSH alias not resolving — could not connect to VM from host
+Case: SSH alias not resolving — could not connect to VM from host
 
 ## Symptom
 
@@ -10,36 +10,40 @@ ssh: Could not resolve hostname almalinux-lab: Name or service not known
 ## Diagnosis
 
 ```bash
-# Checked if ~/.ssh/ existed on the guest
-ls -la ~/.ssh/
-# No such file or directory — directory didn't exist
-
-# Checked network reachability from host
+# Check connectivity
 ping 192.168.56.X
 # OK — packets reaching the VM
 
-# Tested SSH connection with verbose output
+# Attempted direct connection by IP to isolate the issue
+ssh luis@192.168.56.X
+# Connected successfully — network was not the problem
+
+# Tested with verbose output to inspect the handshake
 ssh -v luis@192.168.56.X
-# Connected successfully — issue was in the config, not the network
+# Connected — confirmed issue was in the alias config, not SSH itself
+
+# Inspected the host SSH config
+cat ~/.ssh/config
+# alias for almalinux-lab was missing
 ```
 
 ## Root Cause
 
-Two separate issues:
+Two separate issues in two different contexts:
 
-1. `~/.ssh/` directory didn't exist on the guest — Vim couldn't write `~/.ssh/config`, throwing `E212: Can't open file for writing`
-2. The SSH alias was never added to `~/.ssh/config` on the **host** — only the guest config was edited
+1. On the VM — `~/.ssh/` directory didn't exist; Vim threw `E212: Can't open file for writing` when attempting to create `~/.ssh/config`
+2. On the host — `~/.ssh/config` existed (with other VM aliases) but the `almalinux-lab` entry was never added
 
 ## Fix
 
-On the guest — created the directory with correct permissions:
+On the VM — created the directory with correct permissions:
 
 ```bash
 mkdir ~/.ssh
 chmod 700 ~/.ssh
 ```
 
-On the host — added the alias to `~/.ssh/config`:
+On the host — added the missing alias to `~/.ssh/config` using nano:
 
 ```
 Host almalinux-lab
@@ -48,6 +52,20 @@ Host almalinux-lab
     Port 22
 ```
 
+## Validation
+
+```bash
+ssh almalinux-lab
+# Connected successfully using alias
+```
+
 ## Lesson
 
-`~/.ssh/` must exist with `700` permissions before any SSH config can be written — SSH enforces strict permission rules and will refuse to operate if they're wrong. When an alias fails to resolve, always check both ends: the config on the host **and** whether the directory structure exists on the guest.
+When an SSH alias fails to resolve, the issue is always on the client side. Always verify:
+
+- `~/.ssh/config` on the host — the alias must be present and correctly formatted
+- DNS or `/etc/hosts` — if hostname resolution is involved
+
+Guest-side issues may block configuration attempts, but they do not affect alias resolution itself. SSH alias resolution does not involve DNS unless explicitly configured — it is a local mapping defined in `~/.ssh/config`.
+
+`~/.ssh/` must exist with `700` permissions before any SSH config can be written. SSH enforces strict permission rules and will refuse to operate if they're wrong. Use `ssh -v` to confirm whether the issue is network, config, or authentication.
