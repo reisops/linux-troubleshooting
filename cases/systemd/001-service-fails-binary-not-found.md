@@ -26,29 +26,15 @@ journalctl -u myapp --no-pager
 # Confirmed the binary didn't exist
 ls /usr/bin/myapp
 # No such file or directory
-
-# Checked if the service was masked
-systemctl status myapp
-# Loaded: loaded (/etc/systemd/system/myapp.service; enabled; preset: disabled)
-# Active: failed — service was also masked, blocking enable attempts
 ```
 
 ## Root Cause
 
-Two separate issues:
-
-1. The unit file pointed to `/usr/bin/myapp`, but the binary was never created — systemd had valid instructions but nothing to execute
-2. The service was masked (`systemctl mask`), which blocked any attempt to enable or restart it until explicitly unmasked
+The unit file pointed to `/usr/bin/myapp`, but the binary was never created — systemd had valid instructions but nothing to execute.
 
 `status=203/EXEC` always means the same thing: systemd found the unit file, attempted to spawn the process, but the executable did not exist or was not accessible.
 
 ## Fix
-
-Unmasked the service first:
-
-```
-sudo systemctl unmask myapp
-```
 
 Created the missing binary:
 
@@ -86,7 +72,5 @@ $ systemctl status myapp
 ## Lesson
 
 `status=203/EXEC` means systemd reached the execution step but could not spawn the process — the binary was missing, not executable, or the path was wrong. Always verify the `ExecStart` path exists and has execute permissions before investigating anything else.
-
-A masked service is completely blocked by systemd — `enable`, `start`, and `restart` will all fail silently or with access denied. Always check for masking when a service refuses to respond to normal commands: `systemctl status` will show `Loaded: masked` if that's the case.
 
 In production, this error typically appears after a failed deployment, a package removal that left the unit file behind, or a binary path change without updating the unit file.
