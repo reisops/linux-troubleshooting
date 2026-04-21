@@ -1,4 +1,4 @@
-Case: SSH alias not resolving — could not connect to VM from host
+# Case: SSH alias not resolving — could not connect to VM from host
 
 ## Symptom
 
